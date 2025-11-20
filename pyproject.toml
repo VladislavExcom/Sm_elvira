@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "order-bot"
+version = "0.1.0"
+description = "Telegram bot for handling user orders with aiogram and async SQLAlchemy."
+requires-python = ">=3.10"
+dependencies = [
+    "aiogram>=3.0.0",
+    "SQLAlchemy>=2.0",
+    "asyncpg>=0.29.0",
+    "pandas>=2.0.0",
+    "openpyxl>=3.1.0",
+    "prometheus-client>=0.20.0",
+]
+
+[project.scripts]
+order-bot = "bot.__main__:run"

@@ -1,0 +1,16 @@
+.env
+.env.*
+__pycache__/
+*.pyc
+*.pyo
+*.log
+*.sqlite
+.pytest_cache/
+.coverage
+dist/
+build/
+photos/
+tmp/
+test_full.xlsx
+.DS_Store
+*.egg-info/
