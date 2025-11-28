@@ -19,16 +19,16 @@ jobs:
       - name: Build Docker image
         run: docker build -t order-bot:${{ github.sha }} .
 
-      - name: Deploy to server
-        if: github.ref == 'refs/heads/main'
+      - name: Deploy to server (skipped if no VPS secrets yet)
+        if: ${{ github.ref == 'refs/heads/main' && secrets.SSH_HOST != '' && secrets.SSH_USER != '' && secrets.SSH_KEY != '' }}
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_KEY: ${{ secrets.SSH_KEY }}
         run: |
           mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/id_rsa
+          printf "%s\n" "$SSH_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST 'cd /srv/order-bot && git pull && docker compose down && docker compose up -d --build'
+          ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" 'cd /srv/order-bot && git pull && docker compose down && docker compose up -d --build'
       - name: run tests
         run: echo "No tests yet"
