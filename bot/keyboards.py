@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+﻿from typing import List, Optional, Tuple
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -10,29 +10,29 @@ BRAND_SUGGESTIONS = ["Nike", "Adidas", "Jordan", "Puma", "New Balance", "Reebok"
 def main_kb(user_id: int) -> InlineKeyboardMarkup:
     buttons = [
         [
-            InlineKeyboardButton(text="➕ Оставить заявку", callback_data="menu:create"),
+            InlineKeyboardButton(text="📝 Оставить заявку", callback_data="menu:create"),
             InlineKeyboardButton(text="📋 Мои заявки", callback_data="menu:orders"),
         ],
-        [InlineKeyboardButton(text="ℹ️ О боте", callback_data="menu:info")],
+        [InlineKeyboardButton(text="ℹ️ Как это работает", callback_data="menu:info")],
     ]
     admins = get_admins()
     if user_id in admins:
         buttons.append(
             [
-                InlineKeyboardButton(text="📥 Выгрузить заявки", callback_data="menu:admin_reports"),
-                InlineKeyboardButton(text="📤 Синхронизировать статусы", callback_data="menu:admin_status"),
+                InlineKeyboardButton(text="📊 Отчёты", callback_data="menu:admin_reports"),
+                InlineKeyboardButton(text="🛠 Изменить статус", callback_data="menu:admin_status"),
             ]
         )
         buttons.append(
             [
-                InlineKeyboardButton(text="❓ Связаться с клиентом", callback_data="menu:admin_question"),
-                InlineKeyboardButton(text="📢 Push-рассылка", callback_data="menu:admin_push"),
+                InlineKeyboardButton(text="❓ Вопрос пользователю", callback_data="menu:admin_question"),
+                InlineKeyboardButton(text="📣 Push-рассылка", callback_data="menu:admin_push"),
             ]
         )
         buttons.append(
             [
                 InlineKeyboardButton(text="⚙️ Админ-настройки", callback_data="menu:admin_settings"),
-                InlineKeyboardButton(text="📊 Аналитика", callback_data="menu:analytics"),
+                InlineKeyboardButton(text="📈 Аналитика", callback_data="menu:analytics"),
             ]
         )
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -43,8 +43,8 @@ def compact_inline_cancel_back(prev: Optional[str] = None, skip: bool = False) -
     if prev:
         row.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"back:{prev}"))
     if skip:
-        row.append(InlineKeyboardButton(text="➡️ Пропустить", callback_data="skip"))
-    row.append(InlineKeyboardButton(text="🏠 В меню", callback_data="cancel"))
+        row.append(InlineKeyboardButton(text="⏩ Пропустить", callback_data="skip"))
+    row.append(InlineKeyboardButton(text="✖️ Отмена", callback_data="cancel"))
     return InlineKeyboardMarkup(inline_keyboard=[row])
 
 
@@ -61,7 +61,7 @@ def brand_prompt_keyboard() -> InlineKeyboardMarkup:
     rows.append(
         [
             InlineKeyboardButton(text="⬅️ Назад", callback_data="back:product"),
-            InlineKeyboardButton(text="🏠 В меню", callback_data="cancel"),
+            InlineKeyboardButton(text="✖️ Отмена", callback_data="cancel"),
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -71,9 +71,9 @@ def confirm_edit_inline() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Всё верно", callback_data="confirm:yes"),
+                InlineKeyboardButton(text="✅ Отправить", callback_data="confirm:yes"),
                 InlineKeyboardButton(text="✏️ Изменить", callback_data="confirm:edit"),
-                InlineKeyboardButton(text="🏠 В меню", callback_data="confirm:cancel"),
+                InlineKeyboardButton(text="✖️ Отмена", callback_data="confirm:cancel"),
             ]
         ]
     )
@@ -88,11 +88,11 @@ def edit_fields_inline() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="Размер", callback_data="edit_field:size"),
-                InlineKeyboardButton(text="Цена", callback_data="edit_field:price"),
+                InlineKeyboardButton(text="Комментарий", callback_data="edit_field:comment"),
             ],
             [
-                InlineKeyboardButton(text="Комментарий", callback_data="edit_field:comment"),
-                InlineKeyboardButton(text="⬅️ К предпросмотру", callback_data="edit_field:back"),
+                InlineKeyboardButton(text="⬅️ К предварительному виду", callback_data="edit_field:back"),
+                InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:home"),
             ],
         ]
     )
@@ -102,8 +102,8 @@ def edit_value_inline() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="⬅️ К предпросмотру", callback_data="edit_preview"),
-                InlineKeyboardButton(text="🏠 В меню", callback_data="cancel"),
+                InlineKeyboardButton(text="⬅️ К предварительному виду", callback_data="edit_preview"),
+                InlineKeyboardButton(text="✖️ Отмена", callback_data="cancel"),
             ]
         ]
     )
@@ -114,29 +114,29 @@ def order_actions_user_inline(order_id: int, allow_actions: bool) -> InlineKeybo
     if allow_actions:
         rows.append(
             [
-                InlineKeyboardButton(text="✏ Изменить заявку", callback_data=f"user_edit:{order_id}"),
-                InlineKeyboardButton(text="❌ Отменить заявку", callback_data=f"user_delete:{order_id}"),
+                InlineKeyboardButton(text="✏️ Изменить заявку", callback_data=f"user_edit:{order_id}"),
+                InlineKeyboardButton(text="🗑 Удалить заявку", callback_data=f"user_delete:{order_id}"),
             ]
         )
 
-    rows.append([InlineKeyboardButton(text="⬅️ К списку заявок", callback_data="menu:orders")])
-    rows.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="user_back")])
+    rows.append([InlineKeyboardButton(text="⬅️ К моим заявкам", callback_data="menu:orders")])
+    rows.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def orders_list_inline(order_ids: List[int]) -> Optional[InlineKeyboardMarkup]:
-    if not order_ids:
+def orders_list_inline(order_items: List[Tuple[int, str]]) -> Optional[InlineKeyboardMarkup]:
+    if not order_items:
         return None
     rows: List[List[InlineKeyboardButton]] = []
     row: List[InlineKeyboardButton] = []
-    for oid in order_ids:
-        row.append(InlineKeyboardButton(text=str(oid), callback_data=f"show_order:{oid}"))
+    for oid, label in order_items:
+        row.append(InlineKeyboardButton(text=str(label), callback_data=f"show_order:{oid}"))
         if len(row) == 4:
             rows.append(row)
             row = []
     if row:
         rows.append(row)
-    rows.append([InlineKeyboardButton(text="🏠 В меню", callback_data="user_back")])
+    rows.append([InlineKeyboardButton(text="◀️ Назад", callback_data="user_back")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -144,12 +144,15 @@ def admin_settings_inline() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="👥 Администраторы", callback_data="settings:admins"),
+                InlineKeyboardButton(text="👤 Администраторы", callback_data="settings:admins"),
             ],
             [
-                InlineKeyboardButton(text="🧠 Макросы", callback_data="settings:macros"),
+                InlineKeyboardButton(text="📝 Макросы", callback_data="settings:macros"),
             ],
-            [InlineKeyboardButton(text="🏠 В меню", callback_data="settings:home")],
+            [
+                InlineKeyboardButton(text="🗂 Вид", callback_data="settings:kinds"),
+            ],
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="settings:home")],
         ]
     )
 
@@ -162,8 +165,8 @@ def admin_admins_inline() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="➖ Удалить", callback_data="settings:remove_admin"),
             ],
             [
-                InlineKeyboardButton(text="↩️ Назад", callback_data="settings:back"),
-                InlineKeyboardButton(text="🏠 В меню", callback_data="settings:home"),
+                InlineKeyboardButton(text="⬅️ Назад", callback_data="settings:back"),
+                InlineKeyboardButton(text="🏠 Главное меню", callback_data="settings:home"),
             ],
         ]
     )
@@ -172,8 +175,8 @@ def admin_admins_inline() -> InlineKeyboardMarkup:
 def admin_id_prompt_inline() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="↩️ К списку", callback_data="settings:admins")],
-            [InlineKeyboardButton(text="🏠 В меню", callback_data="settings:home")],
+            [InlineKeyboardButton(text="⬅️ К списку", callback_data="settings:admins")],
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="settings:home")],
         ]
     )
 
@@ -193,14 +196,14 @@ def macros_list_inline(items: List[Tuple[int, str]]) -> InlineKeyboardMarkup:
     else:
         rows.append(
             [
-                InlineKeyboardButton(text="Макросов нет", callback_data="macro:create"),
+                InlineKeyboardButton(text="Макросов пока нет", callback_data="macro:create"),
             ]
         )
     rows.append([InlineKeyboardButton(text="➕ Создать макрос", callback_data="macro:create")])
     rows.append(
         [
-            InlineKeyboardButton(text="↩️ Назад", callback_data="macro:back"),
-            InlineKeyboardButton(text="🏠 В меню", callback_data="macro:home"),
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="macro:back"),
+            InlineKeyboardButton(text="🏠 Главное меню", callback_data="macro:home"),
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -209,8 +212,8 @@ def macros_list_inline(items: List[Tuple[int, str]]) -> InlineKeyboardMarkup:
 def macro_input_inline() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="↩️ К списку", callback_data="macro_input:list")],
-            [InlineKeyboardButton(text="🏠 В меню", callback_data="macro_input:home")],
+            [InlineKeyboardButton(text="⬅️ К списку", callback_data="macro_input:list")],
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="macro_input:home")],
         ]
     )
 
@@ -219,12 +222,12 @@ def macro_detail_inline(macro_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="✏️ Править", callback_data=f"macro:edit:{macro_id}"),
+                InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"macro:edit:{macro_id}"),
                 InlineKeyboardButton(text="🗑 Удалить", callback_data=f"macro:delete:{macro_id}"),
             ],
             [
-                InlineKeyboardButton(text="↩️ К списку", callback_data="macro:list"),
-                InlineKeyboardButton(text="🏠 В меню", callback_data="macro:home"),
+                InlineKeyboardButton(text="⬅️ К списку", callback_data="macro:list"),
+                InlineKeyboardButton(text="🏠 Главное меню", callback_data="macro:home"),
             ],
         ]
     )
@@ -239,8 +242,8 @@ def macro_confirm_inline() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="📝 Текст", callback_data="macro_confirm:body"),
             ],
             [
-                InlineKeyboardButton(text="↩️ К списку", callback_data="macro_confirm:list"),
-                InlineKeyboardButton(text="🏠 В меню", callback_data="macro_confirm:home"),
+                InlineKeyboardButton(text="⬅️ К списку", callback_data="macro_confirm:list"),
+                InlineKeyboardButton(text="🏠 Главное меню", callback_data="macro_confirm:home"),
             ],
         ]
     )
@@ -250,17 +253,17 @@ def report_choice_inline() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="📦 Полный файл", callback_data="report:full"),
-                InlineKeyboardButton(text="🧰 Рабочий файл", callback_data="report:work"),
+                InlineKeyboardButton(text="📄 Полный отчёт", callback_data="report:full"),
+                InlineKeyboardButton(text="🗂 Рабочий отчёт", callback_data="report:work"),
             ],
-            [InlineKeyboardButton(text="🏠 В меню", callback_data="report:back")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="report:back")],
         ]
     )
 
 
 def cancel_only_inline() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="🏠 В меню", callback_data="cancel")]]
+        inline_keyboard=[[InlineKeyboardButton(text="✖️ Отмена", callback_data="cancel")]]
     )
 
 
@@ -268,10 +271,10 @@ def push_preview_inline() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🚀 Отправить", callback_data="push_confirm:send"),
-                InlineKeyboardButton(text="✏️ Исправить текст", callback_data="push_confirm:edit"),
+                InlineKeyboardButton(text="📤 Отправить", callback_data="push_confirm:send"),
+                InlineKeyboardButton(text="✏️ Изменить текст", callback_data="push_confirm:edit"),
             ],
-            [InlineKeyboardButton(text="🏠 В меню", callback_data="push_confirm:cancel")],
+            [InlineKeyboardButton(text="✖️ Отмена", callback_data="push_confirm:cancel")],
         ]
     )
 
@@ -287,20 +290,43 @@ def admin_question_templates_inline(items: List[Tuple[int, str]]) -> InlineKeybo
                 )
             ]
         )
-    rows.append([InlineKeyboardButton(text="✏️ Написать свой вопрос", callback_data="question_template:custom")])
+    rows.append([InlineKeyboardButton(text="✏️ Свой вопрос", callback_data="question_template:custom")])
     rows.append(
         [
-            InlineKeyboardButton(text="↩️ Ввести другой ID", callback_data="question_template:back"),
-            InlineKeyboardButton(text="🏠 В меню", callback_data="question_template:home"),
+            InlineKeyboardButton(text="⬅️ Ввести другой ID", callback_data="question_template:back"),
+            InlineKeyboardButton(text="🏠 Главное меню", callback_data="question_template:home"),
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def kind_list_inline(kinds: List[str]) -> InlineKeyboardMarkup:
+    rows: List[List[InlineKeyboardButton]] = []
+    for kind in kinds:
+        rows.append([InlineKeyboardButton(text=kind, callback_data=f"kind:open:{kind}")])
+    rows.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def kind_detail_inline(kind: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="➕ Добавить слово", callback_data=f"kind:add:{kind}"),
+                InlineKeyboardButton(text="➖ Удалить слово", callback_data=f"kind:remove:{kind}"),
+            ],
+            [
+                InlineKeyboardButton(text="⬅️ Назад", callback_data="settings:kinds"),
+                InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:home"),
+            ],
+        ]
+    )
 
 
 def analytics_inline() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="🔄 Обновить", callback_data="analytics:refresh")],
-            [InlineKeyboardButton(text="🏠 В меню", callback_data="analytics:home")],
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="analytics:home")],
         ]
     )

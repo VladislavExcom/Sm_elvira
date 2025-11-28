@@ -9,6 +9,7 @@ class OrderStates(StatesGroup):
     comment_photo = State()
     confirm = State()
     edit_field = State()
+    answer_preview = State()
 
 
 class AdminStates(StatesGroup):
@@ -23,3 +24,5 @@ class AdminStates(StatesGroup):
     waiting_macro_title = State()
     waiting_macro_body = State()
     waiting_macro_confirm = State()
+    waiting_kind_keyword_add = State()
+    waiting_kind_keyword_remove = State()

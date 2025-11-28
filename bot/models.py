@@ -14,6 +14,7 @@ class User(Base):
 
     # Telegram chat IDs exceed 32-bit, so we use BigInteger to avoid overflow
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    public_id: Mapped[Optional[str]] = mapped_column(String(32), unique=True)
     username: Mapped[Optional[str]] = mapped_column(String(255))
     full_name: Mapped[Optional[str]] = mapped_column(String(255))
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -25,6 +26,7 @@ class Order(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    user_order_number: Mapped[Optional[int]] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(64), nullable=False, default=STATUS_NEW)
     product: Mapped[Optional[str]] = mapped_column(String(512))
     brand: Mapped[Optional[str]] = mapped_column(String(256))
@@ -72,3 +74,20 @@ class OrderPhoto(Base):
     mime_type: Mapped[Optional[str]] = mapped_column(String(128))
     data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class OrderStatusLog(Base):
+    __tablename__ = "order_status_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    order_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(64), nullable=False)
+    ts: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class KindKeyword(Base):
+    __tablename__ = "kind_keywords"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    keyword: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)

@@ -1,0 +1,71 @@
+﻿<mxfile host="app.diagrams.net" modified="2025-11-28T18:10:00Z" agent="7.0" version="20.3.7" editor="www.diagrams.net" type="device">
+  <diagram id="order-flow" name="Order Flow">
+    <mxGraphModel dx="960" dy="640" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="1600" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <!-- Пользовательский поток -->
+        <mxCell id="main" value="🏠 Главное меню\nКнопки: 📝 Оставить заявку, 📋 Мои заявки, ℹ️ Как это работает" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="60" y="60" width="220" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="create" value="📝 Оставить заявку\nСообщение: введите товар\nКнопки: ✖️ Отмена" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="320" y="60" width="240" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="brand" value="Шаг Бренд\nСообщение: введите бренд или '-'\nКнопки: подсказки брендов, ⬅️ Назад, ✖️ Отмена" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="600" y="60" width="260" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="size" value="Шаг Размер\nСообщение: введите размер или '-'\nКнопки: ⬅️ Назад, ✖️ Отмена" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="900" y="60" width="240" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="comment" value="Комментарий / фото\nСообщение: добавьте текст/фото\nКнопки: ⏩ Пропустить, ⬅️ Назад, ✖️ Отмена" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="60" width="260" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="preview" value="Предпросмотр заявки\nТекст с полями\nКнопки: ✅ Отправить, ✏️ Изменить, ✖️ Отмена" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="1480" y="60" width="240" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="edit_select" value="Редактирование полей\nКнопки: Товар, Бренд, Размер, Комментарий, ⬅️ К предварительному виду, 🏠 Главное меню" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1480" y="220" width="260" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="sent" value="Заявка отправлена\nТекст: Заявка №{public_id}-{user_order_number} отправлена...\nКнопки: 🏠 Главное меню" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cdeb8b;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="1480" y="400" width="260" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="orders" value="📋 Мои заявки\nТекст: блоки (Уже добавили/Не сможем/В поиске/Отменены) с номерами {public_id}-{user_order_number}\nКнопки: номера (user_order_number), ◀️ Назад" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="60" y="260" width="320" height="160" as="geometry"/>
+        </mxCell>
+        <mxCell id="card" value="Карточка заявки\nТекст: номер, товар, бренд, размер, статус (кратко)\nКнопки: ✏️ Изменить заявку*, 🗑 Удалить заявку*, ⬅️ К моим заявкам, 🏠 Главное меню\n*если статус не финальный" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="420" y="260" width="340" height="160" as="geometry"/>
+        </mxCell>
+        <mxCell id="edit_sent" value="Редактирование отправленной\nКнопки: Товар, Бренд, Размер, Комментарий, ⬅️ К предварительному виду, 🏠 Главное меню" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="800" y="260" width="300" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="deleted" value="Удалена пользователем\nСтатус финальный, кнопок редактирования нет" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="260" width="260" height="120" as="geometry"/>
+        </mxCell>
+        <!-- Админский сценарий вопрос/ответ -->
+        <mxCell id="admin_question" value="Админ: Вопрос пользователю\nШаги: ввод ID заявки → выбор макроса/свой текст\nСтатус заявки: Нужно уточнение" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="60" y="480" width="320" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="user_answer" value="Пользователь отвечает\nСообщение: текст/фото\nБот показывает превью: &quot;Ваш ответ... Отправить?&quot;\nКнопки: ✅ Отправить ответ, ✏️ Исправить" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="420" y="480" width="360" height="160" as="geometry"/>
+        </mxCell>
+        <mxCell id="answer_sent" value="Ответ подтверждён\nДействия: записать в БД, статус Ответ получен, уведомить админов\nСообщение пользователю: Ответ отправлен администратору" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cdeb8b;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="820" y="520" width="340" height="140" as="geometry"/>
+        </mxCell>
+        <!-- Рёбра -->
+        <mxCell id="e1" edge="1" parent="1" source="main" target="create" style="endArrow=block;html=1;"/>
+        <mxCell id="e2" edge="1" parent="1" source="create" target="brand" style="endArrow=block;html=1;"/>
+        <mxCell id="e3" edge="1" parent="1" source="brand" target="size" style="endArrow=block;html=1;"/>
+        <mxCell id="e4" edge="1" parent="1" source="size" target="comment" style="endArrow=block;html=1;"/>
+        <mxCell id="e5" edge="1" parent="1" source="comment" target="preview" style="endArrow=block;html=1;"/>
+        <mxCell id="e6" edge="1" parent="1" source="preview" target="sent" style="endArrow=block;html=1;labelBackgroundColor=#ffffff;" value="✅ Отправить"/>
+        <mxCell id="e7" edge="1" parent="1" source="preview" target="edit_select" style="endArrow=block;html=1;labelBackgroundColor=#ffffff;" value="✏️ Изменить"/>
+        <mxCell id="e8" edge="1" parent="1" source="orders" target="card" style="endArrow=block;html=1;" value="Нажатие номера"/>
+        <mxCell id="e9" edge="1" parent="1" source="card" target="edit_sent" style="endArrow=block;html=1;labelBackgroundColor=#ffffff;" value="✏️ Изменить заявку"/>
+        <mxCell id="e10" edge="1" parent="1" source="card" target="deleted" style="endArrow=block;html=1;labelBackgroundColor=#ffffff;" value="🗑 Удалить заявку"/>
+        <mxCell id="e11" edge="1" parent="1" source="main" target="orders" style="endArrow=block;html=1;" value="📋 Мои заявки"/>
+        <mxCell id="e12" edge="1" parent="1" source="admin_question" target="user_answer" style="endArrow=block;html=1;" value="Вопрос пользователю"/>
+        <mxCell id="e13" edge="1" parent="1" source="user_answer" target="answer_sent" style="endArrow=block;html=1;labelBackgroundColor=#ffffff;" value="✅ Отправить ответ"/>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
