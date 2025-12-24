@@ -14,7 +14,7 @@ import logging
 import secrets
 from datetime import datetime, timedelta
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from aiogram import BaseMiddleware, Bot, Dispatcher, Router
 from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -55,7 +55,10 @@ from .keyboards import (
     admin_question_templates_inline,
     admin_settings_inline,
     analytics_inline,
+    block_prompt_inline,
+    blocklist_inline,
     brand_prompt_keyboard,
+    brand_prompt_edit_keyboard,
     cancel_only_inline,
     compact_inline_cancel_back,
     confirm_edit_inline,
@@ -140,7 +143,10 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
         try:
             await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS public_id VARCHAR(32) UNIQUE"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS block_reason TEXT"))
             await conn.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_order_number INTEGER"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_status_digest_at TIMESTAMP"))
             await conn.execute(text("""
             CREATE OR REPLACE VIEW view_orders_count_status AS
             SELECT status, COUNT(*) AS cnt FROM orders GROUP BY status;
@@ -259,6 +265,86 @@ async def refresh_views_periodically(interval_hours: int = 4):
         except Exception:
             logger.exception("Periodic refresh failed")
         await asyncio.sleep(interval_hours * 3600)
+
+
+# ----------- Weekly digest -------------
+async def get_active_orders(user_id: int) -> List[Order]:
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        q = await session.execute(
+            select(Order)
+            .where(Order.user_id == user_id, Order.status.not_in(FINAL_ORDER_STATUSES))
+            .order_by(Order.created_at.desc())
+        )
+        orders = q.scalars().all()
+        await ensure_order_numbers(session, orders, user_id)
+        return orders
+
+
+async def send_status_digest(user: User, force: bool = False, update_timestamp: bool = True) -> bool:
+    if getattr(user, "is_blocked", False):
+        return False
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        q = await session.execute(
+            select(Order)
+            .where(Order.user_id == user.id)
+            .order_by(Order.created_at.asc())
+        )
+        orders_all = q.scalars().all()
+        await ensure_order_numbers(session, orders_all, user.id)
+        active_orders = [o for o in orders_all if o.status not in FINAL_ORDER_STATUSES]
+        if not active_orders:
+            return False
+        first_created = min(o.created_at for o in orders_all if o.created_at) or datetime.utcnow()
+        now = datetime.utcnow()
+        last_sent = user.last_status_digest_at
+        if not force:
+            if first_created + timedelta(days=7) > now:
+                return False
+            if last_sent and last_sent + timedelta(days=7) > now:
+                return False
+        public_id = await ensure_user_public_id(session, user)
+        lines: List[str] = ["🔔 Ваши активные заявки:\n"]
+        for o in active_orders:
+            num = format_order_number(o, public_id)
+            brand_size = " · ".join(
+                [part for part in [o.brand or "—", o.size or "—"] if part]
+            )
+            status = STATUS_SHORT.get(o.status, o.status)
+            lines.append(f"• {num} · {o.product or '—'} ({brand_size}) — {status}")
+            lines.append(f"  Комментарий: {o.comment or '—'}")
+            lines.append("")
+        lines.append("Если нужно уточнить или изменить заявку — откройте карточку.")
+        text = "\n".join(lines).strip()
+        sent = False
+        try:
+            await get_bot().send_message(chat_id=user.id, text=text, reply_markup=main_kb(user.id))
+            sent = True
+        except Exception:
+            logger.exception("Не удалось отправить дайджест пользователю %s", user.id)
+        if update_timestamp:
+            user.last_status_digest_at = now
+            session.add(user)
+            await session.commit()
+        return sent
+
+
+async def weekly_digest_worker():
+    session_factory = get_session_factory()
+    while True:
+        try:
+            async with session_factory() as session:
+                q = await session.execute(select(User).where(User.is_blocked.is_(False)))
+                users = q.scalars().all()
+            for u in users:
+                try:
+                    await send_status_digest(u, force=False, update_timestamp=True)
+                except Exception:
+                    logger.exception("Digest send failed for user %s", u.id)
+        except Exception:
+            logger.exception("Weekly digest worker failure")
+        await asyncio.sleep(24 * 3600)  # check daily
 
 
 async def generate_unique_user_public_id(session) -> str:
@@ -387,6 +473,33 @@ class UserSyncMiddleware(BaseMiddleware):
 
 
 dp.update.middleware(UserSyncMiddleware())
+
+
+class BlockMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event, data):
+        user_obj = getattr(event, "from_user", None)
+        if not user_obj:
+            return await handler(event, data)
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            user = await session.get(User, user_obj.id)
+        if user and user.is_blocked:
+            reason = f"\nПричина: {user.block_reason}" if user.block_reason else ""
+            block_text = (
+                "Ваш аккаунт заблокирован администратором."
+                f"{reason}\nЕсли считаете, что это ошибка, напишите нам в поддержку."
+            )
+            try:
+                await get_bot().send_message(chat_id=user_obj.id, text=block_text)
+            except Exception:
+                logger.exception("Не удалось отправить уведомление о блокировке пользователю %s", user_obj.id)
+            if isinstance(event, CallbackQuery):
+                await safe_answer_callback(event, text="Доступ ограничен", show_alert=True)
+            return
+        return await handler(event, data)
+
+
+dp.update.middleware(BlockMiddleware())
 
 async def create_order_db(data: dict, user_id: int) -> Tuple[int, str]:
     session_factory = get_session_factory()
@@ -619,11 +732,14 @@ def build_preview_text(data: dict) -> str:
 
 
 INFO_TEXT = (
-    "Оставьте заявку на товар, которого пока нет на сайте.\n\n"
-    "1️⃣ Нажмите «Оставить заявку» и опишите модель, бренд и размер.\n"
-    "2️⃣ Если есть пожелания по цене или фото — приложите их.\n"
-    "3️⃣ В разделе «Мои заявки» следите за статусами и отвечайте на уточнения.\n\n"
-    "Нажимайте кнопку «🏠 Главное меню», чтобы вернуться на главный экран."
+    "Добро пожаловать в Telegram-бот Спортмастер 👋\n\n"
+    "Здесь вы можете оставить заявку на товар, которого сейчас нет на сайте, но который вы хотели бы приобрести у нас. "
+    "Мы постараемся найти нужную модель и сообщим вам результат.\n\n"
+    "Что умеет бот:\n"
+    "• 📝 принимать заявки на поиск товара;\n"
+    "• 📋 уведомлять о результате поиска и показывать статус ваших заявок;\n"
+    "• ℹ️ подсказать, как это работает.\n\n"
+    "Чтобы начать, нажмите кнопку «📝 Создать заявку»."
 )
 
 
@@ -643,11 +759,20 @@ async def safe_answer_callback(cb: CallbackQuery, **kwargs) -> None:
         logger.debug("Callback answer failed (possibly too old): %s", kwargs)
 
 
+MAIN_MENU_TEXT = (
+    "Вы можете:\n"
+    "• 📝 создать новую заявку на поиск товара, которого нет на сайте;\n"
+    "• 📋 просмотреть статус уже отправленных заявок;\n"
+    "• 🔔 получить информацию о найденных моделях, если они доступны.\n\n"
+    "Выберите действие ниже, чтобы продолжить."
+)
+
+
 async def send_main_menu(user_id: int, text: Optional[str] = None) -> None:
     tg_bot = get_bot()
     await tg_bot.send_message(
         chat_id=user_id,
-        text=text or "🏠 Главное меню. Что хотите сделать?",
+        text=text or MAIN_MENU_TEXT,
         reply_markup=main_kb(user_id),
     )
 
@@ -672,6 +797,14 @@ def answer_review_inline(order_id: int) -> InlineKeyboardMarkup:
     )
 
 
+def answer_edit_inline(order_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"answer_edit_back:{order_id}")],
+        ]
+    )
+
+
 async def send_answer_preview(user_id: int, order_id: int, text: str, state: FSMContext) -> None:
     tg_bot = get_bot()
     data = await state.get_data()
@@ -684,8 +817,10 @@ async def send_answer_preview(user_id: int, order_id: int, text: str, state: FSM
     sent = await tg_bot.send_message(
         chat_id=user_id,
         text=(
-            f"Ваш ответ:\n\n{text}\n\nОтправить?\n\n"
-            "Пришлите новый текст, если нужно поправить — мы обновим превью и кнопки."
+            f"Ваш ответ:\n\n{text}\n\n"
+            "Все верно?\n"
+            "Нажмите «✅ Отправить ответ».\n"
+            "Если нужно поправить — нажмите «✏️ Исправить»."
         ),
         reply_markup=answer_review_inline(order_id),
     )
@@ -721,7 +856,7 @@ async def send_user_orders_list(user_id: int) -> None:
         if order.status not in FINAL_ORDER_STATUSES:
             interactive_ids.append((order.id, order_label))
         title = order.product or "Без названия"
-        line_parts: List[str] = [f"#{order_number_full}", title]
+        line_parts: List[str] = [f"{order_number_full}", title]
         if order.brand or order.size:
             line_parts.append(f"{order.brand or '—'} · {order.size or '—'}")
         photos = parse_photo_entries(order.photos, settings)
@@ -731,9 +866,10 @@ async def send_user_orders_list(user_id: int) -> None:
         line = f"- {line}"
 
         if order.status == STATUS_ADDED:
+            lines_added = [line]
             if order.product_link:
-                line += f"\n  Ссылка: {order.product_link}"
-            bucket_added.append(line)
+                lines_added.append(f"  Ссылка: {order.product_link}")
+            bucket_added.append("\n".join(lines_added))
         elif order.status == STATUS_NOT_ADDED:
             bucket_not_added.append(line)
         elif order.status == STATUS_DELETED_BY_USER:
@@ -842,11 +978,15 @@ async def deliver_admin_question(order_id: int, admin_id: int, text: str) -> boo
     order = await get_order_by_id(order_id)
     if not order:
         return False
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        user_row = await session.get(User, order.user_id)
+        if user_row and user_row.is_blocked:
+            return False
     order_number = await get_order_display_number(order)
     tg_bot = get_bot()
     try:
         await tg_bot.send_message(chat_id=order.user_id, text=f"🔔 Вопрос по заявке #{order_number}:\n\n{text}")
-        session_factory = get_session_factory()
         async with session_factory() as session:
             q = await session.execute(select(Order).where(Order.id == order_id))
             ord_obj = q.scalars().first()
@@ -889,6 +1029,28 @@ async def show_admin_settings_menu(user_id: int) -> None:
         text="Админ-настройки:\nВыберите раздел для точечных действий.",
         reply_markup=admin_settings_inline(),
     )
+
+
+async def show_blocklist(user_id: int, notice: Optional[str] = None) -> None:
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        q = await session.execute(select(User).where(User.is_blocked.is_(True)).order_by(User.id))
+        blocked = q.scalars().all()
+    lines: List[str] = []
+    if notice:
+        lines.append(notice)
+        lines.append("")
+    lines.append("Блок-лист пользователей:")
+    if blocked:
+        for u in blocked:
+            name = u.full_name or u.username or "—"
+            reason = f" (причина: {u.block_reason})" if u.block_reason else ""
+            lines.append(f"- {u.id} · {name}{reason}")
+    else:
+        lines.append("Список пуст — никто не заблокирован.")
+    lines.append("")
+    lines.append("Можно добавить или убрать пользователя из блок-листа ниже.")
+    await get_bot().send_message(chat_id=user_id, text="\n".join(lines), reply_markup=blocklist_inline())
 
 
 async def show_macros_menu(user_id: int, notice: Optional[str] = None) -> None:
@@ -991,15 +1153,25 @@ async def prompt_stage(user_id: int, state: FSMContext, stage: str) -> None:
     await clear_prompt_message(user_id, state)
     if stage == "product":
         await state.set_state(OrderStates.product)
-        text = "Введите название товара (пример: Nike Air Max). Кнопка «🏠 Главное меню» всегда возвращает на главный экран."
+        text = (
+            "Введите название интересующего вас товара.\n\n"
+            "Например: Кроссовки Nike Air Max 90.\n\n"
+            "Кнопка «🏠 Меню» вернёт на главный экран."
+        )
         markup = cancel_only_inline()
     elif stage == "brand":
         await state.set_state(OrderStates.brand)
-        text = "Введите бренд (или '-' если не важно). Можно выбрать из подсказок или ввести свой вариант."
+        text = "Укажите бренд. Можно выбрать из подсказок ниже или написать свой вариант."
         markup = brand_prompt_keyboard()
     elif stage == "size":
         await state.set_state(OrderStates.size)
-        text = "Введите размер (или '-' если не важно). Используйте «⬅️ Назад», если хотите изменить бренд."
+        text = (
+            "Введите размер.\n"
+            "Для обуви — EU/UK и длину стельки в см (например: EU 44 (28.5 см) или UK 10 (28 см)).\n"
+            "Для одежды — размер с буквенным и русским эквивалентом (например: M (48)).\n"
+            "Если размер не важен, введите «- б/р».\n\n"
+            "Используйте «⬅️ Назад», если хотите изменить бренд."
+        )
         markup = compact_inline_cancel_back(prev="brand", skip=False)
     elif stage == "price":
         await state.set_state(OrderStates.price)
@@ -1007,7 +1179,11 @@ async def prompt_stage(user_id: int, state: FSMContext, stage: str) -> None:
         markup = compact_inline_cancel_back(prev="size", skip=False)
     elif stage == "comment":
         await state.set_state(OrderStates.comment_photo)
-        text = "Добавьте комментарий или фото (можно несколько сообщений). Нажмите «➡️ Пропустить», если нечего добавить."
+        text = (
+            "Добавьте комментарий или фото (можно несколько сообщений).\n"
+            "Например: желаемый цвет, материал, ссылки или свои снимки.\n"
+            "Если ничего не нужно добавлять, нажмите «➡️ Пропустить»."
+        )
         markup = compact_inline_cancel_back(prev="size", skip=True)
     else:
         return
@@ -1018,12 +1194,32 @@ async def prompt_stage(user_id: int, state: FSMContext, stage: str) -> None:
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     await add_or_update_user(message.from_user)
+    full_name = message.from_user.full_name or message.from_user.username or "друг"
     welcome = (
-        f"Привет, {message.from_user.full_name or message.from_user.username}!\n"
-        "Здесь можно оставить пожелание по товару, которого нет на сайте. "
-        "Выберите действие ниже."
+        f"Здравствуйте, {full_name}!\n\n"
+        "Добро пожаловать в Telegram-бот Спортмастер 👋\n\n"
+        "Здесь вы можете оставить заявку на товар, которого сейчас нет на сайте, но который вы хотели бы приобрести у нас. "
+        "Мы постараемся найти нужную модель и сообщим вам результат.\n\n"
+        "Что умеет бот:\n"
+        "• 📝 принимать заявки на поиск товара;\n"
+        "• 📋 уведомлять о результате поиска и показывать статус ваших заявок;\n"
+        "• ℹ️ подсказать, как это работает.\n\n"
+        "Чтобы начать, нажмите кнопку «📝 Создать заявку»."
     )
     await send_main_menu(message.from_user.id, welcome)
+
+
+@router.message(lambda m: m.text and m.text.strip() == "/digest_test")
+async def cmd_digest_test(message: Message):
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        q = await session.execute(select(User).where(User.id == message.from_user.id))
+        user = q.scalars().first()
+    if not user:
+        await message.answer("Пользователь не найден.")
+        return
+    await send_status_digest(user, force=True, update_timestamp=False)
+    await message.answer("Пробный дайджест отправлен, если есть активные заявки.")
 
 
 @router.callback_query(lambda c: c.data == "menu:create")
@@ -1092,6 +1288,29 @@ async def cb_brand_suggest(cb: CallbackQuery, state: FSMContext):
     await delete_callback_message(cb.message)
     await state.update_data(brand=value)
     await prompt_stage(cb.from_user.id, state, "size")
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("brand_suggest_edit:"))
+async def cb_brand_suggest_edit(cb: CallbackQuery, state: FSMContext):
+    tg_bot = get_bot()
+    value = cb.data.split(":", 1)[1]
+    await safe_answer_callback(cb)
+    data = await state.get_data()
+    last_msg_id = data.get("last_msg_id")
+    if last_msg_id:
+        try:
+            await tg_bot.delete_message(chat_id=cb.from_user.id, message_id=last_msg_id)
+        except Exception:
+            pass
+    await state.update_data(brand=value)
+    newdata = await state.get_data()
+    preview_text = build_preview_text(newdata)
+    sent = await tg_bot.send_message(
+        chat_id=cb.from_user.id, text=preview_text, reply_markup=confirm_edit_inline()
+    )
+    await state.update_data(last_msg_id=sent.message_id)
+    await state.set_state(OrderStates.confirm)
+    await cb.answer()
 
 @router.message(OrderStates.size)
 async def size_handler(message: Message, state: FSMContext):
@@ -1217,7 +1436,15 @@ async def cb_confirm(cb: CallbackQuery, state: FSMContext):
                 await tg_bot.delete_message(chat_id=cb.from_user.id, message_id=last_msg_id)
             except Exception:
                 pass
-        sent = await tg_bot.send_message(chat_id=cb.from_user.id, text="Выберите поле для редактирования:", reply_markup=edit_fields_inline())
+        sent = await tg_bot.send_message(
+            chat_id=cb.from_user.id,
+            text=(
+                "Выберите поле для редактирования ✏️\n"
+                "После выбора введите новое значение — подставим его в заявку и покажем превью для проверки 👀\n"
+                "Когда всё будет верно, подтвердите отправку ✅"
+            ),
+            reply_markup=edit_fields_inline(),
+        )
         await state.update_data(last_msg_id=sent.message_id)
         await state.set_state(OrderStates.edit_field)
         await cb.answer()
@@ -1238,17 +1465,33 @@ async def cb_edit_field(cb: CallbackQuery, state: FSMContext):
     field = cb.data.split(":", 1)[1]
     data = await state.get_data()
     if field == "back":
-        # вернуть preview
+        # вернуть карточку заявки
         last_msg_id = data.get("last_msg_id")
         if last_msg_id:
             try:
                 await tg_bot.delete_message(chat_id=cb.from_user.id, message_id=last_msg_id)
             except Exception:
                 pass
-        preview_text = build_preview_text(data)
-        sent = await tg_bot.send_message(chat_id=cb.from_user.id, text=preview_text, reply_markup=confirm_edit_inline())
+        edit_oid = data.get("edit_order_id")
+        ord_obj = await get_order_by_id(edit_oid) if edit_oid else None
+        if not ord_obj:
+            await send_user_orders_list(cb.from_user.id)
+            await state.clear()
+            await cb.answer()
+            return
+        order_number = await get_order_display_number(ord_obj)
+        text = (
+            f"📦 Заявка #{order_number}\n"
+            f"Товар: {ord_obj.product or '—'}\n"
+            f"Бренд: {ord_obj.brand or '—'}\n"
+            f"Размер: {ord_obj.size or '—'}\n"
+            f"Комментарий: {ord_obj.comment or '—'}"
+        )
+        allow_actions = ord_obj.status not in FINAL_ORDER_STATUSES
+        sent = await tg_bot.send_message(
+            chat_id=cb.from_user.id, text=text, reply_markup=order_actions_user_inline(ord_obj.id, allow_actions)
+        )
         await state.update_data(last_msg_id=sent.message_id)
-        await state.set_state(OrderStates.confirm)
         await cb.answer()
         return
 
@@ -1260,13 +1503,22 @@ async def cb_edit_field(cb: CallbackQuery, state: FSMContext):
         except Exception:
             pass
 
-    current = data.get(field, "")
+    field_labels = {
+        "product": "товара",
+        "brand": "бренда",
+        "size": "размера",
+        "comment": "комментария",
+    }
+    label = field_labels.get(field, field)
+    current = data.get(field, "") or "—"
     prompt = (
-        f"Текущее значение для {field}: {current}\n"
-        "Отправьте новое значение. Если передумали, используйте кнопки ниже."
+        f"Изменение {label}\n"
+        f"Ваше текущее значение: {current}\n\n"
+        "Введите новое значение и отправьте. Если передумали, используйте кнопки ниже."
     )
+    markup = brand_prompt_edit_keyboard() if field == "brand" else edit_value_inline()
     sent = await tg_bot.send_message(
-        chat_id=cb.from_user.id, text=prompt, reply_markup=edit_value_inline()
+        chat_id=cb.from_user.id, text=prompt, reply_markup=markup
     )
     await state.update_data(edit_field=field, last_msg_id=sent.message_id)
     await state.set_state(OrderStates.edit_field)
@@ -1313,12 +1565,17 @@ async def cb_edit_preview(cb: CallbackQuery, state: FSMContext):
             for title, body in ADMIN_QUESTION_TEMPLATES:
                 session.add(MacroTemplate(title=title, body=body, created_by=0, updated_by=0))
             await session.commit()
-    preview_text = build_preview_text(data)
     sent = await tg_bot.send_message(
-        chat_id=cb.from_user.id, text=preview_text, reply_markup=confirm_edit_inline()
+        chat_id=cb.from_user.id,
+        text=(
+            "Выберите поле для редактирования ✏️\n"
+            "После выбора введите новое значение — подставим его в заявку и покажем превью для проверки 👀\n"
+            "Когда всё будет верно, подтвердите отправку ✅"
+        ),
+        reply_markup=edit_fields_inline(),
     )
     await state.update_data(last_msg_id=sent.message_id)
-    await state.set_state(OrderStates.confirm)
+    await state.set_state(OrderStates.edit_field)
     await cb.answer()
 
 @router.callback_query(lambda c: c.data == "user_back")
@@ -1336,22 +1593,13 @@ async def cb_show_order(cb: CallbackQuery):
         await cb.answer("Заявка не найдена.", show_alert=True)
         return
     await delete_callback_message(cb.message)
-    status_short = {
-        STATUS_NEW: "В работе",
-        STATUS_IN_QUEUE: "В работе",
-        STATUS_CLARIFY: "В работе",
-        STATUS_ANSWER_RECEIVED: "В работе",
-        STATUS_ADDED: "Добавлен",
-        STATUS_NOT_ADDED: "Не будет добавлен",
-        STATUS_DELETED_BY_USER: "Удалена пользователем",
-    }.get(ord_obj.status, ord_obj.status)
     order_number = await get_order_display_number(ord_obj)
     text = (
         f"📦 Заявка #{order_number}\n"
         f"Товар: {ord_obj.product or '—'}\n"
         f"Бренд: {ord_obj.brand or '—'}\n"
         f"Размер: {ord_obj.size or '—'}\n"
-        f"Статус: {status_short}"
+        f"Комментарий: {ord_obj.comment or '—'}"
     )
     allow_actions = ord_obj.status not in FINAL_ORDER_STATUSES
     # Отправляем новое сообщение (предыдущая карточка оставляется, но при редактировании удаляется)
@@ -1472,6 +1720,46 @@ async def cb_menu_admin_question(cb: CallbackQuery, state: FSMContext):
     await cb.answer()
     await delete_callback_message(cb.message)
     await start_admin_question_flow(cb.from_user.id, state)
+
+
+@router.callback_query(lambda c: c.data == "settings:digest" or c.data == "menu:admin_digest")
+async def cb_menu_admin_digest(cb: CallbackQuery):
+    if cb.from_user.id not in get_admins():
+        await cb.answer("Нет доступа.", show_alert=True)
+        return
+    await cb.answer()
+    await delete_callback_message(cb.message)
+    tg_bot = get_bot()
+    await tg_bot.send_message(
+        chat_id=cb.from_user.id,
+        text="Запускаю внеплановый дайджест — проверяю активные заявки у всех пользователей.",
+    )
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        q = await session.execute(select(User).where(User.is_blocked.is_(False)))
+        users = q.scalars().all()
+    checked = len(users)
+    sent = 0
+    for u in users:
+        try:
+            delivered = await send_status_digest(u, force=True, update_timestamp=False)
+            if delivered:
+                sent += 1
+        except Exception:
+            logger.exception("Не удалось отправить внеплановый дайджест пользователю %s", u.id)
+    async with session_factory() as session:
+        session.add(
+            AdminAction(
+                admin_id=cb.from_user.id,
+                action_type="digest_manual",
+                details=f"checked={checked}, sent={sent}",
+            )
+        )
+        await session.commit()
+    await send_main_menu(
+        cb.from_user.id,
+        f"Готово. Проверили {checked} пользователей, отправили дайджест тем, у кого есть активные заявки ({sent} сообщений).",
+    )
 
 
 @router.callback_query(lambda c: c.data == "menu:admin_settings")
@@ -1673,7 +1961,17 @@ async def admin_handle_excel_upload(message: Message, state: FSMContext):
                 notify[ord_obj.user_id].append(f"✅ Заявка #{order_number}: получили ваш ответ.")
         await session.commit()
 
+    blocked_ids: Set[int] = set()
+    if notify:
+        async with session_factory() as session_check:
+            q_blocked = await session_check.execute(
+                select(User.id).where(User.id.in_(list(notify.keys())), User.is_blocked.is_(True))
+            )
+            blocked_ids = {row[0] for row in q_blocked.all()}
+
     for uid, msgs in notify.items():
+        if uid in blocked_ids:
+            continue
         text = "Обновления по вашим заявкам:\n\n" + "\n".join(msgs)
         try:
             await tg_bot.send_message(chat_id=int(uid), text=text)
@@ -1888,10 +2186,20 @@ async def cb_settings(cb: CallbackQuery, state: FSMContext):
     elif action == "macros":
         await delete_callback_message(cb.message)
         await show_macros_menu(cb.from_user.id)
+    elif action == "blocklist":
+        await state.clear()
+        await delete_callback_message(cb.message)
+        await show_blocklist(cb.from_user.id)
+    elif action == "digest":
+        await state.clear()
+        await delete_callback_message(cb.message)
+        await cb_menu_admin_digest(cb)  # reuse handler
     elif action == "back":
+        await state.clear()
         await delete_callback_message(cb.message)
         await show_admin_settings_menu(cb.from_user.id)
     elif action == "home":
+        await state.clear()
         await delete_callback_message(cb.message)
         await send_main_menu(cb.from_user.id, "Возвращаю главное меню.")
     elif action == "stub":
@@ -1901,6 +2209,47 @@ async def cb_settings(cb: CallbackQuery, state: FSMContext):
         await cb.answer("Неизвестное действие.", show_alert=True)
         return
     await cb.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("block:"))
+async def cb_block_actions(cb: CallbackQuery, state: FSMContext):
+    if cb.from_user.id not in get_admins():
+        await cb.answer("Нет доступа.", show_alert=True)
+        return
+    action = cb.data.split(":", 1)[1]
+    if action == "add":
+        await state.set_state(AdminStates.waiting_block_user_id)
+        await delete_callback_message(cb.message)
+        await get_bot().send_message(
+            chat_id=cb.from_user.id,
+            text=(
+                "Введите ID пользователя, которого нужно заблокировать.\n"
+                "Можно добавить причину после ID через пробел — мы сохраним её в карточке."
+            ),
+            reply_markup=block_prompt_inline(),
+        )
+        await cb.answer()
+    elif action == "remove":
+        await state.set_state(AdminStates.waiting_unblock_user_id)
+        await delete_callback_message(cb.message)
+        await get_bot().send_message(
+            chat_id=cb.from_user.id,
+            text="Введите ID пользователя, которого нужно разблокировать.",
+            reply_markup=block_prompt_inline(),
+        )
+        await cb.answer()
+    elif action in ("list", "back"):
+        await state.clear()
+        await delete_callback_message(cb.message)
+        await show_blocklist(cb.from_user.id)
+        await cb.answer()
+    elif action == "home":
+        await state.clear()
+        await delete_callback_message(cb.message)
+        await send_main_menu(cb.from_user.id, "Возвращаю главное меню.")
+        await cb.answer()
+    else:
+        await cb.answer("Неизвестное действие.", show_alert=True)
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("macro:"))
@@ -2175,6 +2524,70 @@ async def process_remove_admin(message: Message, state: FSMContext):
     await show_admins_overview(message.from_user.id, notice=f"Пользователь {rem_id} удалён из админов.")
     await state.clear()
 
+
+@router.message(AdminStates.waiting_block_user_id)
+async def process_block_user(message: Message, state: FSMContext):
+    if message.from_user.id not in get_admins():
+        await state.clear()
+        return
+    text_raw = (message.text or "").strip()
+    if not text_raw:
+        await message.answer("Введите ID пользователя.", reply_markup=block_prompt_inline())
+        return
+    parts = text_raw.split(maxsplit=1)
+    try:
+        target_id = int(parts[0])
+    except Exception:
+        await message.answer("ID должен быть числом. Попробуйте снова.", reply_markup=block_prompt_inline())
+        return
+    reason = parts[1].strip() if len(parts) > 1 else None
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        user = await session.get(User, target_id)
+        if not user:
+            public_id = await generate_unique_user_public_id(session)
+            user = User(id=target_id, username=None, full_name=None, is_admin=False, public_id=public_id)
+            session.add(user)
+        else:
+            await ensure_user_public_id(session, user)
+        user.is_blocked = True
+        user.block_reason = reason
+        action = AdminAction(admin_id=message.from_user.id, action_type="block_user", details=str(target_id))
+        session.add(action)
+        await session.commit()
+    await state.clear()
+    await show_blocklist(
+        message.from_user.id,
+        notice=f"Пользователь {target_id} заблокирован." + (f" Причина: {reason}" if reason else ""),
+    )
+
+
+@router.message(AdminStates.waiting_unblock_user_id)
+async def process_unblock_user(message: Message, state: FSMContext):
+    if message.from_user.id not in get_admins():
+        await state.clear()
+        return
+    try:
+        target_id = int((message.text or "").strip())
+    except Exception:
+        await message.answer("ID должен быть числом. Попробуйте снова.", reply_markup=block_prompt_inline())
+        return
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        user = await session.get(User, target_id)
+        if not user or not user.is_blocked:
+            await state.clear()
+            await show_blocklist(message.from_user.id, notice="Этот ID не найден в блок-листе.")
+            return
+        user.is_blocked = False
+        user.block_reason = None
+        action = AdminAction(admin_id=message.from_user.id, action_type="unblock_user", details=str(target_id))
+        session.add(action)
+        await session.commit()
+    await state.clear()
+    await show_blocklist(message.from_user.id, notice=f"Пользователь {target_id} разблокирован.")
+
+
 # --- Обработка ответов от пользователей (когда статус = Уточнение) ---
 @router.message()
 async def catch_user_answers(message: Message, state: FSMContext):
@@ -2240,7 +2653,21 @@ async def cb_answer_confirm(cb: CallbackQuery, state: FSMContext):
         except Exception:
             pass
     await safe_answer_callback(cb)
-    await send_main_menu(cb.from_user.id, "Ответ отправлен администратору.")
+    await send_main_menu(cb.from_user.id, "Ответ отправлен администратору.\n\n" + MAIN_MENU_TEXT)
+
+@router.callback_query(lambda c: c.data and c.data.startswith("answer_edit_back:"))
+async def cb_answer_edit_back(cb: CallbackQuery, state: FSMContext):
+    oid = int(cb.data.split(":", 1)[1])
+    data = await state.get_data()
+    draft = data.get("answer_draft") or "—"
+    preview_id = data.get("answer_preview_msg_id")
+    if preview_id:
+        try:
+            await get_bot().delete_message(chat_id=cb.from_user.id, message_id=preview_id)
+        except Exception:
+            pass
+    await safe_answer_callback(cb)
+    await send_answer_preview(cb.from_user.id, oid, draft, state)
 
 @router.callback_query(lambda c: c.data and c.data.startswith("answer_edit:"))
 async def cb_answer_edit(cb: CallbackQuery, state: FSMContext):
@@ -2256,7 +2683,16 @@ async def cb_answer_edit(cb: CallbackQuery, state: FSMContext):
     await state.update_data(answer_order_id=oid)
     await state.set_state(OrderStates.answer_preview)
     await safe_answer_callback(cb)
-    await send_answer_preview(cb.from_user.id, oid, draft, state)
+    sent = await get_bot().send_message(
+        chat_id=cb.from_user.id,
+        text=(
+            f"Текущий ответ:\n\n{draft}\n\n"
+            "Отправьте новый текст, и мы обновим превью.\n"
+            "Или нажмите «⬅️ Назад», чтобы вернуться без изменений."
+        ),
+        reply_markup=answer_edit_inline(oid),
+    )
+    await state.update_data(answer_preview_msg_id=sent.message_id)
 
 # ---------------- START/STOP ----------------
 async def on_startup():
@@ -2268,6 +2704,7 @@ async def on_startup():
     except Exception:
         logger.exception("Initial refresh of materialized views failed")
     asyncio.create_task(refresh_views_periodically(4))
+    asyncio.create_task(weekly_digest_worker())
     setup_metrics_server()
     session_factory = get_session_factory()
     async with session_factory() as session:

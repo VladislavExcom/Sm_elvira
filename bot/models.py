@@ -18,7 +18,10 @@ class User(Base):
     username: Mapped[Optional[str]] = mapped_column(String(255))
     full_name: Mapped[Optional[str]] = mapped_column(String(255))
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    block_reason: Mapped[Optional[str]] = mapped_column(Text)
     first_seen: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_status_digest_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
 
 class Order(Base):

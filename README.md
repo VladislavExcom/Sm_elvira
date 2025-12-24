@@ -14,14 +14,15 @@
 python -m venv .venv
 . .venv/bin/activate
 pip install -e .
-cp .env.example .env  # заполнить BOT_TOKEN и DATABASE_DSN
-python main.py
+cp .env.example .env  # заполнить BOT_TOKEN и DATABASE_DSN (для Docker — host=postgres; для локального Postgres — host=localhost)
+python main.py  # .env подхватится автоматически
 ```
 
 ### Docker / Compose
 ```bash
-docker compose up -d
-# бот + postgres + prometheus + grafana
+cp .env.example .env  # переменные подхватываются docker compose через env_file
+docker compose up -d --build
+# запустятся бот + postgres + prometheus + grafana
 ```
 В `docker-compose.yml` можно переопределить переменные через `.env`.
 

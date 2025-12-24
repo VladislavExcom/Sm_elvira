@@ -3,6 +3,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Set
 
+from dotenv import load_dotenv
+
+# Load environment variables from a local .env if present (no-op inside Docker where envs are passed explicitly)
+load_dotenv()
+
 DEFAULT_BOT_TOKEN = "7179761726:AAGBHM1uZa47rWyXylYJFD7ii61cPDf9pqc"
 DEFAULT_DATABASE_DSN = "postgresql+asyncpg://bot_user:DKFl//1502@localhost:5432/orders_db"
 DEFAULT_ADMINS = "1279907773"

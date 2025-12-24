@@ -25,6 +25,8 @@ from ..models import Order, KindKeyword
 from ..utils.photos import parse_photo_entries
 from .photos import restore_order_photos
 
+KIND_CATALOG = ["Одежда", "Обувь", "Инвентарь", "Аксессуары"]
+
 
 async def generate_order_reports(tmp_dir: str) -> Tuple[str, str]:
     settings = get_settings()
@@ -37,15 +39,8 @@ async def generate_order_reports(tmp_dir: str) -> Tuple[str, str]:
         for kind, kw in kw_rows.all():
             keywords_map[kind].append(kw)
 
-    DEFAULT_KEYWORDS = {
-        "Одежда": ["футболк", "куртк", "штаны", "джинс", "толстовк", "худи", "шорт", "юбк", "плать", "носки"],
-        "Обувь": ["кроссовк", "ботин", "кеды", "сланс", "сланц", "сандал", "крос"],
-        "Инвентарь": ["мяч", "гантел", "штанг", "скакалк", "коврик", "инвент"],
-        "Аксессуары": ["рюкзак", "сумк", "перчат", "шапк", "шлем", "очки", "аксессуар"],
-    }
-    if not keywords_map:
-        keywords_map.update(DEFAULT_KEYWORDS)
-    KIND_VALUES = sorted(set(keywords_map.keys()) | set(DEFAULT_KEYWORDS.keys()))
+    # Для классификации используем только слова из БД; без дефолтных словарей, чтобы пустой список не давал ложных срабатываний
+    KIND_VALUES = sorted(set(keywords_map.keys()) | set(KIND_CATALOG))
 
     def guess_kind(name: str) -> str:
         title = (name or "").lower()

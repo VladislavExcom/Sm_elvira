@@ -26,3 +26,5 @@ class AdminStates(StatesGroup):
     waiting_macro_confirm = State()
     waiting_kind_keyword_add = State()
     waiting_kind_keyword_remove = State()
+    waiting_block_user_id = State()
+    waiting_unblock_user_id = State()
