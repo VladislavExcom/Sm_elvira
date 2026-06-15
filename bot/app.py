@@ -284,13 +284,7 @@ async def get_active_orders(user_id: int) -> List[Order]:
         return orders
 
 
-<<<<<<< Updated upstream
-async def send_status_digest(user: User, force: bool = False, update_timestamp: bool = True) -> bool:
-    if getattr(user, "is_blocked", False):
-        return False
-=======
 async def send_status_digest(user: User, force: bool = False, update_timestamp: bool = True) -> None:
->>>>>>> Stashed changes
     session_factory = get_session_factory()
     async with session_factory() as session:
         q = await session.execute(
@@ -302,46 +296,23 @@ async def send_status_digest(user: User, force: bool = False, update_timestamp: 
         await ensure_order_numbers(session, orders_all, user.id)
         active_orders = [o for o in orders_all if o.status not in FINAL_ORDER_STATUSES]
         if not active_orders:
-<<<<<<< Updated upstream
-            return False
-=======
             return
->>>>>>> Stashed changes
         first_created = min(o.created_at for o in orders_all if o.created_at) or datetime.utcnow()
         now = datetime.utcnow()
         last_sent = user.last_status_digest_at
         if not force:
             if first_created + timedelta(days=7) > now:
-<<<<<<< Updated upstream
-                return False
-            if last_sent and last_sent + timedelta(days=7) > now:
-                return False
-        public_id = await ensure_user_public_id(session, user)
-        lines: List[str] = ["🔔 Ваши активные заявки:\n"]
-=======
                 return
             if last_sent and last_sent + timedelta(days=7) > now:
                 return
         public_id = await ensure_user_public_id(session, user)
         lines: List[str] = ["Обновления по вашим активным заявкам:\n"]
->>>>>>> Stashed changes
         for o in active_orders:
             num = format_order_number(o, public_id)
             brand_size = " · ".join(
                 [part for part in [o.brand or "—", o.size or "—"] if part]
             )
             status = STATUS_SHORT.get(o.status, o.status)
-<<<<<<< Updated upstream
-            lines.append(f"• {num} · {o.product or '—'} ({brand_size}) — {status}")
-            lines.append(f"  Комментарий: {o.comment or '—'}")
-            lines.append("")
-        lines.append("Если нужно уточнить или изменить заявку — откройте карточку.")
-        text = "\n".join(lines).strip()
-        sent = False
-        try:
-            await get_bot().send_message(chat_id=user.id, text=text, reply_markup=main_kb(user.id))
-            sent = True
-=======
             lines.append(f"• Заявка #{num} · {o.product or '—'}")
             lines.append(f"  Бренд/Размер: {brand_size}")
             lines.append(f"  Комментарий: {o.comment or '—'}")
@@ -350,17 +321,12 @@ async def send_status_digest(user: User, force: bool = False, update_timestamp: 
         text = "\n".join(lines).strip()
         try:
             await get_bot().send_message(chat_id=user.id, text=text)
->>>>>>> Stashed changes
         except Exception:
             logger.exception("Не удалось отправить дайджест пользователю %s", user.id)
         if update_timestamp:
             user.last_status_digest_at = now
             session.add(user)
             await session.commit()
-<<<<<<< Updated upstream
-        return sent
-=======
->>>>>>> Stashed changes
 
 
 async def weekly_digest_worker():
@@ -368,11 +334,7 @@ async def weekly_digest_worker():
     while True:
         try:
             async with session_factory() as session:
-<<<<<<< Updated upstream
-                q = await session.execute(select(User).where(User.is_blocked.is_(False)))
-=======
                 q = await session.execute(select(User))
->>>>>>> Stashed changes
                 users = q.scalars().all()
             for u in users:
                 try:
@@ -1257,17 +1219,7 @@ async def cmd_digest_test(message: Message):
         return
     await send_status_digest(user, force=True, update_timestamp=False)
     await message.answer("Пробный дайджест отправлен, если есть активные заявки.")
-<<<<<<< Updated upstream
 
-
-@router.callback_query(lambda c: c.data == "menu:create")
-async def cb_menu_create(cb: CallbackQuery, state: FSMContext):
-    await cb.answer()
-    await delete_callback_message(cb.message)
-    await start_order_creation_flow(cb.from_user.id, state)
-
-
-=======
 
 
 @router.callback_query(lambda c: c.data == "menu:create")
@@ -1277,7 +1229,7 @@ async def cb_menu_create(cb: CallbackQuery, state: FSMContext):
     await start_order_creation_flow(cb.from_user.id, state)
 
 
->>>>>>> Stashed changes
+
 @router.callback_query(lambda c: c.data == "menu:info")
 async def cb_menu_info(cb: CallbackQuery):
     await cb.answer()
@@ -1648,12 +1600,8 @@ async def cb_show_order(cb: CallbackQuery):
         f"Товар: {ord_obj.product or '—'}\n"
         f"Бренд: {ord_obj.brand or '—'}\n"
         f"Размер: {ord_obj.size or '—'}\n"
-<<<<<<< Updated upstream
-        f"Комментарий: {ord_obj.comment or '—'}"
-=======
         f"Комментарий: {ord_obj.comment or '—'}\n"
         f"Статус: {status_short}"
->>>>>>> Stashed changes
     )
     allow_actions = ord_obj.status not in FINAL_ORDER_STATUSES
     # Отправляем новое сообщение (предыдущая карточка оставляется, но при редактировании удаляется)
