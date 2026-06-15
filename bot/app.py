@@ -16,15 +16,12 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from typing import Dict, List, Optional, Set, Tuple
 
-import socket
 from aiogram import BaseMiddleware, Bot, Dispatcher, Router
 from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.filters import CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.client.session.aiohttp import AiohttpSession
-from aiohttp import TCPConnector
 
 from sqlalchemy import func, select, text
 
@@ -2724,9 +2721,6 @@ async def on_shutdown():
 
 # ---------------- RUN ----------------
 async def main():
-    global bot
-    bot = Bot(token=settings.bot_token, session=AiohttpSession(connector=TCPConnector(family=socket.AF_INET)))
-    init_context(bot, database.session_factory, settings, database)
     dp.include_router(router)
     await on_startup()
     try:
