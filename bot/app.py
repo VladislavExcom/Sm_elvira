@@ -131,7 +131,7 @@ logger = logging.getLogger(__name__)
 
 # ---------------- BOT / DISPATCHER / FSM / DB ----------------
 database = Database(settings)
-bot = Bot(token=settings.bot_token, session=AiohttpSession(connector=TCPConnector(family=socket.AF_INET)))
+bot = Bot(token=settings.bot_token)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 router = Router()
@@ -2724,6 +2724,9 @@ async def on_shutdown():
 
 # ---------------- RUN ----------------
 async def main():
+    global bot
+    bot = Bot(token=settings.bot_token, session=AiohttpSession(connector=TCPConnector(family=socket.AF_INET)))
+    init_context(bot, database.session_factory, settings, database)
     dp.include_router(router)
     await on_startup()
     try:
